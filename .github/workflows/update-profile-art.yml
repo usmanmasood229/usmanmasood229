@@ -1,0 +1,37 @@
+name: Update profile art
+
+# Redraws the contribution graph from real data: daily, on every push to main, and on demand.
+
+"on":
+  schedule:
+    - cron: "17 6 * * *"   # ~06:17 UTC (11:17 PKT) every day
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  heatmap:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -r scripts/requirements.txt
+
+      - name: Scrape contributions (public page, no token)
+        run: python scripts/fetch_contributions.py
+
+      - name: Render contribution graph
+        run: python scripts/render_heatmap.py
+
+      # [skip ci] stops this commit from triggering the push run again
+      - uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: refresh contribution graph [skip ci]"
+          file_pattern: "data/contributions.json contrib-heatmap.svg"
