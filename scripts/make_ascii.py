@@ -1,12 +1,14 @@
 """Turn a portrait on a plain light background into a self-typing ASCII-art SVG.
 
-One ink colour on a dark terminal window. Each row is wiped in left to right with
-a block cursor riding the edge, top to bottom, then it holds (SMIL, no JS).
+One ink colour on a dark terminal window. Rows print top to bottom, each with a
+block cursor sweeping across it, then it holds. CSS keyframes only,
+inside a no-preference motion query, so the resting state is the finished portrait
+(reduced-motion visitors and viewers without CSS animation see it straight away).
 Run once per photo; the result is committed.
 
-    python scripts/make_ascii.py [photo] [out.svg]
+    pip install numpy pillow          (not needed in CI, which never runs this)
+    python scripts/make_ascii.py [photo] [out.svg]        STATIC=1 for a finished frame
 """
-import html
 import os
 import sys
 from pathlib import Path
@@ -25,9 +27,9 @@ LINE_WEIGHT = 0.55           # how hard edges (eyes, brows, beard line) are push
 GAMMA = 1.4                  # >1 darkens mid-tones (sparser skin), <1 brightens them
 # Positive image on a dark terminal: bright skin prints dense, dark hair/suit prints as
 # faint dots, the background prints nothing. (A negative made black hair/suit glow.)
-RAMP = " .`:-=+*cs#%@"       # sparse (dark) -> dense (bright); index 0 is reserved for background
+RAMP = " .`:-=+*cs#%@"       # sparse (dark) -> dense (bright); index 0 is the background. XML-safe chars only
 
-COLS = int(os.environ.get("COLS", 180))
+COLS = 180                     # 180 keeps the window 840x884, the same as info-card.svg beside it
 ART_W = 800
 CELL_W = ART_W / COLS
 CELL_H = CELL_W * 15 / 8       # monospace glyphs are ~1.875x taller than wide
@@ -37,7 +39,7 @@ W, H = ART_W + 2 * PAD, TITLE_H + ROWS * CELL_H + STATUS_H + PAD
 
 BG, BG2, FRAME, MUTED, INK, ACCENT = "#0d1117", "#11161f", "#30363d", "#7d8590", "#c9d1d9", "#e8ff2a"
 FONT = "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
-PRINT_SECONDS = 5.5            # whole portrait prints in this long, at any resolution
+PRINT_SECONDS = 5.5            # whole portrait prints in this long
 STATIC = bool(os.environ.get("STATIC"))  # STATIC=1 -> finished frame, no animation (for previews)
 
 
@@ -71,9 +73,20 @@ def to_rows(path):
 
 def render(rows):
     row_dur = PRINT_SECONDS / len(rows)
+    css = "" if STATIC else (
+        "<style>@media (prefers-reduced-motion:no-preference){"
+        # rows fade in rather than clip-wipe: Chromium never repaints an animated clip-path inside
+        # the grey filter group (portrait stayed blank), and at ~60 ms a row the two look the same
+        f"@keyframes show{{from{{opacity:0}}}}.r{{animation:show {row_dur:.3f}s linear both}}"
+        f"@keyframes run{{from{{opacity:.9;transform:translateX(0)}}to{{opacity:.9;transform:translateX({ART_W}px)}}}}"
+        f".k{{animation:run {row_dur:.3f}s linear}}"  # no fill: hidden (opacity 0) before and after its row
+        f"@keyframes blink{{50%{{opacity:0}}}}.b{{animation:blink 1s step-end {PRINT_SECONDS}s 5}}"
+        "}</style>"
+    )
     p = [
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H:.0f}" viewBox="0 0 {W} {H:.0f}" '
         f'font-family="{FONT}">',
+        css,
         f'<defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="{BG2}"/>'
         f'<stop offset="1" stop-color="{BG}"/></linearGradient></defs>',
         f'<rect width="{W}" height="{H:.0f}" rx="12" fill="url(#bg)"/>',
@@ -83,7 +96,7 @@ def render(rows):
     for i, c in enumerate(["#ff5f56", "#ffbd2e", "#27c93f"]):
         p.append(f'<circle cx="{PAD + i * 16}" cy="{TITLE_H / 2}" r="5" fill="{c}"/>')
     p.append(f'<text x="{W / 2}" y="{TITLE_H / 2 + 4}" fill="{MUTED}" font-size="12" text-anchor="middle">'
-             f'usman@github: ~$ ./portrait.sh</text>')
+             f'usman@github:~$ ./portrait.sh</text>')
 
     fs = CELL_H * 0.86
     # a no-op filter makes browsers smooth the text in grey; without it Windows ClearType
@@ -93,26 +106,17 @@ def render(rows):
         if not line.strip():
             continue  # blank rows need no markup
         top = TITLE_H + r * CELL_H
-        t0 = r * row_dur
+        delay = f'style="animation-delay:{r * row_dur:.3f}s"'
         # textLength pins every row to the same width whatever monospace font the viewer has
-        text = (f'xml:space="preserve" x="{PAD}" y="{top + CELL_H * 0.78:.1f}" fill="{INK}" '
-                f'font-size="{fs:.2f}" textLength="{ART_W}" lengthAdjust="spacing">{html.escape(line)}</text>')
-        if STATIC:
-            p.append("<text " + text)
-            continue
         p.append(
-            f'<clipPath id="r{r}"><rect x="{PAD}" y="{top:.1f}" width="0" height="{CELL_H:.2f}">'
-            f'<animate attributeName="width" from="0" to="{ART_W}" begin="{t0:.3f}s" dur="{row_dur:.3f}s" '
-            f'fill="freeze"/></rect></clipPath>'
-            f'<text clip-path="url(#r{r})" {text}'
-            f'<rect y="{top + 1:.1f}" width="{CELL_W:.2f}" height="{CELL_H - 2:.2f}" fill="{ACCENT}" opacity="0">'
-            f'<animate attributeName="x" from="{PAD}" to="{PAD + ART_W}" begin="{t0:.3f}s" dur="{row_dur:.3f}s" '
-            f'fill="freeze"/><set attributeName="opacity" to="0.9" begin="{t0:.3f}s"/>'
-            f'<set attributeName="opacity" to="0" begin="{t0 + row_dur:.3f}s"/></rect>'
+            f'<text class="r" {delay} xml:space="preserve" x="{PAD}" y="{top + CELL_H * 0.78:.1f}" fill="{INK}" '
+            f'font-size="{fs:.2f}" textLength="{ART_W}" lengthAdjust="spacing">{line}</text>'
+            f'<rect class="k" {delay} x="{PAD}" y="{top + 1:.1f}" width="{CELL_W:.2f}" height="{CELL_H - 2:.2f}" '
+            f'fill="{ACCENT}" opacity="0"/>'
         )
     p.append("</g>")
 
-    # status bar: prompt + name + blinking cursor
+    # status bar: prompt + name + a cursor that blinks a few times once the portrait is printed
     sy = TITLE_H + ROWS * CELL_H + 8
     prompt, name = "usman@github:~$ whoami ", "Usman Masood"
     text_w = (len(prompt) + len(name)) * 13 * 0.6
@@ -120,16 +124,13 @@ def render(rows):
         f'<line x1="0" y1="{sy:.1f}" x2="{W}" y2="{sy:.1f}" stroke="{FRAME}"/>',
         f'<text x="{PAD}" y="{sy + 24:.1f}" font-size="13" fill="{MUTED}" textLength="{text_w:.1f}">'
         f'{prompt}<tspan fill="{INK}">{name}</tspan></text>',
-        f'<rect x="{PAD + text_w + 4:.1f}" y="{sy + 12:.1f}" width="8" height="15" fill="{ACCENT}">'
-        f'<animate attributeName="opacity" values="1;1;0;0" keyTimes="0;.5;.51;1" dur="1s" '
-        f'begin="{PRINT_SECONDS:.1f}s" repeatCount="indefinite"/></rect>',
+        f'<rect class="b" x="{PAD + text_w + 4:.1f}" y="{sy + 12:.1f}" width="8" height="15" fill="{ACCENT}"/>',
         "</svg>",
     ]
     return "".join(p)
 
 
 if __name__ == "__main__":
-    rows = to_rows(SRC)
-    svg = render(rows)
+    svg = render(to_rows(SRC))
     OUT.write_text(svg, encoding="utf-8")
     print(f"wrote {OUT.name} ({len(svg):,} bytes, {COLS}x{ROWS}, {W}x{H:.0f})")

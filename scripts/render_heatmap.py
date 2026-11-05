@@ -55,15 +55,16 @@ def render(data):
     for i, c in enumerate(["#ff5f56", "#ffbd2e", "#27c93f"]):
         p.append(f'<circle cx="{PAD + i * 16}" cy="{TITLE_H / 2}" r="5" fill="{c}"/>')
     p.append(f'<text x="{w / 2}" y="{TITLE_H / 2 + 4}" fill="{MUTED}" font-size="12" text-anchor="middle">'
-             f'usman@github: ~/contributions --graph</text>')
+             f'usman@github:~$ ./contributions.sh</text>')
 
-    # month labels over the column holding the 1st of each month
-    last_label_col = -9
-    for col, row, date, _ in cells:
-        if date.endswith("-01") and col - last_label_col >= 3:
-            month = datetime.date.fromisoformat(date).strftime("%b")
-            p.append(f'<text x="{gx + col * STEP}" y="{TITLE_H + 15}" fill="{MUTED}" font-size="10">{month}</text>')
-            last_label_col = col
+    # month labels over the column holding the 1st of each month (1sts are always 4+ columns apart),
+    # plus the opening month at column 0 when the first 1st leaves it room, like GitHub does
+    starts = [(col, date) for col, _, date, _ in cells if date.endswith("-01")]
+    if not starts or starts[0][0] >= 3:
+        starts.insert(0, (0, cells[0][2]))
+    for col, date in starts:
+        month = datetime.date.fromisoformat(date).strftime("%b")
+        p.append(f'<text x="{gx + col * STEP}" y="{TITLE_H + 15}" fill="{MUTED}" font-size="10">{month}</text>')
     for row, name in [(1, "Mon"), (3, "Wed"), (5, "Fri")]:
         p.append(f'<text x="{PAD}" y="{gy + row * STEP + 9.5}" fill="{MUTED}" font-size="9">{name}</text>')
 
@@ -83,12 +84,13 @@ def render(data):
     p.append(f'<line x1="0" y1="{sy}" x2="{w}" y2="{sy}" stroke="{FRAME}"/>')
     best, rng = data["best_day"], data["range"]
     plural = lambda n, word: f"{n:,} {word}{'' if n == 1 else 's'}"
+    total = data["total"]
     p += [
         f'<text x="{PAD}" y="{sy + 26}" font-size="13" fill="{MUTED}"><tspan fill="{ACCENT}" font-weight="700">'
-        f'{data["total"]:,}</tspan> contributions in the last year</text>',
+        f'{total:,}</tspan> contribution{"" if total == 1 else "s"} in the last year</text>',
         f'<text x="{w - PAD}" y="{sy + 26}" font-size="12" fill="{MUTED}" text-anchor="end">'
         f'{rng["start"]} &#8594; {rng["end"]}</text>',
-        f'<text x="{PAD}" y="{sy + 52}" font-size="13" fill="{MUTED}">current streak <tspan fill="{TEXT}" '
+        f'<text x="{PAD}" y="{sy + 52}" font-size="13" fill="{MUTED}" xml:space="preserve">current streak <tspan fill="{TEXT}" '
         f'font-weight="700">{plural(data["current_streak"], "day")}</tspan>   &#183;   longest <tspan fill="{TEXT}" '
         f'font-weight="700">{plural(data["longest_streak"], "day")}</tspan></text>',
         f'<text x="{w - PAD}" y="{sy + 52}" font-size="12" fill="{MUTED}" text-anchor="end">best day '

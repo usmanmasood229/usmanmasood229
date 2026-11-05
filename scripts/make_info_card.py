@@ -15,7 +15,6 @@ OUT = Path(__file__).resolve().parent.parent / "info-card.svg"
 LINES = [
     ("Role", "Full Stack & AI Automation Engineer"),
     ("Company", "Mantaq"),
-    ("Uptime", "shipping production code since 2025"),
     ("Frontend", "Next.js · React · React Native"),
     ("Backend", "Node · Fastify · PostgreSQL · Supabase"),
     ("Cloud", "AWS"),
@@ -45,9 +44,9 @@ STATIC = bool(os.environ.get("STATIC"))
 def render():
     p = [
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" viewBox="0 0 {W} {H}" font-family="{FONT}">',
-        "<style>@keyframes in{from{opacity:0;transform:translateX(-10px)}}"
-        ".l{animation:in .45s ease-out both}"
-        "@media (prefers-reduced-motion:reduce){.l{animation:none}}</style>",
+        "" if STATIC else  # resting state is the finished card, so reduced motion just skips the show
+        "<style>@media (prefers-reduced-motion:no-preference){@keyframes in{from{opacity:0;transform:translateX(-10px)}}"
+        ".l{animation:in .45s ease-out both}@keyframes blink{50%{opacity:0}}.b{animation:blink 1s step-end 2s 5}}</style>",
         f'<defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="{BG2}"/>'
         f'<stop offset="1" stop-color="{BG}"/></linearGradient></defs>',
         f'<rect width="{W}" height="{H}" rx="12" fill="url(#bg)"/>',
@@ -57,21 +56,20 @@ def render():
     for i, c in enumerate(["#ff5f56", "#ffbd2e", "#27c93f"]):
         p.append(f'<circle cx="{20 + i * 16}" cy="{TITLE_H / 2}" r="5" fill="{c}"/>')
     p.append(f'<text x="{W / 2}" y="{TITLE_H / 2 + 4}" fill="{MUTED}" font-size="12" text-anchor="middle">'
-             f'usman@github: ~$ neofetch</text>')
+             f'usman@github:~$ neofetch</text>')
 
     n = 0  # animated element counter, drives the stagger
 
-    def line(y, body):
+    def line(body):
         nonlocal n
-        anim = "" if STATIC else f' class="l" style="animation-delay:{START + n * STAGGER:.2f}s"'
+        p.append(f'<g class="l" style="animation-delay:{START + n * STAGGER:.2f}s">{body}</g>')
         n += 1
-        p.append(f'<g{anim}>{body}</g>')
 
     y = TITLE_H + 62
-    line(y, f'<text x="{PAD}" y="{y}" font-size="{FS + 3}" font-weight="700" fill="{ACCENT}" textLength="{12 * (FS + 3) * 0.6:.0f}">usman'
+    line(f'<text x="{PAD}" y="{y}" font-size="{FS + 3}" font-weight="700" fill="{ACCENT}" textLength="{12 * (FS + 3) * 0.6:.0f}">usman'
             f'<tspan fill="{MUTED}">@</tspan>github</text>')
     y += 22
-    line(y, f'<line x1="{PAD}" y1="{y}" x2="{PAD + 12 * (FS + 3) * 0.6:.0f}" y2="{y}" stroke="{MUTED}" '
+    line(f'<line x1="{PAD}" y1="{y}" x2="{PAD + 12 * (FS + 3) * 0.6:.0f}" y2="{y}" stroke="{MUTED}" '
             f'stroke-width="2" stroke-dasharray="6 4"/>')
     y += 14
 
@@ -87,11 +85,11 @@ def render():
         if value:
             x = PAD + (KEY_W if key else 24)
             body += f'<text x="{x}" y="{y}" font-size="{FS}" fill="{INK}">{value}</text>'
-        line(y, body)
+        line(body)
 
     y += 66
     sw = 44
-    line(y, "".join(f'<rect x="{PAD + i * sw}" y="{y - 26}" width="{sw}" height="26" fill="{c}"/>'
+    line("".join(f'<rect x="{PAD + i * sw}" y="{y - 26}" width="{sw}" height="26" fill="{c}"/>'
                     for i, c in enumerate(SWATCHES)))
 
     # status bar, mirrors the portrait's
@@ -99,9 +97,7 @@ def render():
     p += [
         f'<line x1="0" y1="{sy}" x2="{W}" y2="{sy}" stroke="{FRAME}"/>',
         f'<text x="20" y="{sy + 24}" font-size="13" fill="{MUTED}" textLength="{15 * 13 * 0.6:.1f}">usman@github:~$</text>',
-        f'<rect x="{20 + 16 * 13 * 0.6:.1f}" y="{sy + 12}" width="8" height="15" fill="{ACCENT}">'
-        f'<animate attributeName="opacity" values="1;1;0;0" keyTimes="0;.5;.51;1" dur="1s" '
-        f'repeatCount="indefinite"/></rect>',
+        f'<rect class="b" x="{20 + 16 * 13 * 0.6:.1f}" y="{sy + 12}" width="8" height="15" fill="{ACCENT}"/>',
         "</svg>",
     ]
     if y > sy - 20:

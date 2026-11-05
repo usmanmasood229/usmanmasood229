@@ -6,13 +6,12 @@ never overwrites a good graph. Run daily by .github/workflows/update-profile-art
 
     python scripts/fetch_contributions.py [username]
 """
-import datetime
 import json
 import re
 import sys
+import urllib.request
 from pathlib import Path
 
-import requests
 from bs4 import BeautifulSoup
 
 USER = "usmanmasood229"
@@ -35,8 +34,11 @@ def parse(html):
     days.sort(key=lambda d: d["date"])
     if not days:
         raise ValueError("no calendar cells found, GitHub markup may have changed")
-    if any(d["level"] for d in days) and not any(d["count"] for d in days):
+    has_levels, has_counts = any(d["level"] for d in days), any(d["count"] for d in days)
+    if has_levels and not has_counts:
         raise ValueError("cells are coloured but no counts parsed, tooltip markup may have changed")
+    if has_counts and not has_levels:
+        raise ValueError("counts parsed but no cell is coloured, data-level markup may have changed")
     return days
 
 
@@ -60,14 +62,12 @@ def longest_streak(days):
     return best
 
 
-def summarise(days, user):
+def summarise(days):
+    # no timestamp on purpose: the file only changes when the data does, so no empty bot commits
     best = max(days, key=lambda d: d["count"])
     return {
-        "username": user,
-        "generated_at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "range": {"start": days[0]["date"], "end": days[-1]["date"]},
         "total": sum(d["count"] for d in days),
-        "active_days": sum(1 for d in days if d["count"]),
         "current_streak": current_streak(days),
         "longest_streak": longest_streak(days),
         "best_day": {"date": best["date"], "count": best["count"]},
@@ -77,10 +77,10 @@ def summarise(days, user):
 
 if __name__ == "__main__":
     user = sys.argv[1] if len(sys.argv) > 1 else USER
-    resp = requests.get(f"https://github.com/users/{user}/contributions",
-                        headers={"User-Agent": "profile-readme-bot"}, timeout=30)
-    resp.raise_for_status()
-    data = summarise(parse(resp.text), user)
+    req = urllib.request.Request(f"https://github.com/users/{user}/contributions",
+                                 headers={"User-Agent": "profile-readme-bot"})
+    with urllib.request.urlopen(req, timeout=30) as resp:  # raises HTTPError on 4xx/5xx
+        data = summarise(parse(resp.read().decode("utf-8")))
     OUT.parent.mkdir(exist_ok=True)
     OUT.write_text(json.dumps(data, indent=1))
     print(f"wrote {OUT.name}: {data['total']} contributions, streak {data['current_streak']}, "

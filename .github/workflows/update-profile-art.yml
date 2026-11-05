@@ -12,6 +12,11 @@ name: Update profile art
 permissions:
   contents: write
 
+# one run at a time: a newer run replaces an older one instead of racing it to push
+concurrency:
+  group: update-profile-art
+  cancel-in-progress: true
+
 jobs:
   heatmap:
     runs-on: ubuntu-latest
@@ -24,14 +29,18 @@ jobs:
 
       - run: pip install -r scripts/requirements.txt
 
+      - name: Test the scrape and render logic
+        run: python tests/test_scripts.py
+
       - name: Scrape contributions (public page, no token)
         run: python scripts/fetch_contributions.py
 
       - name: Render contribution graph
         run: python scripts/render_heatmap.py
 
-      # [skip ci] stops this commit from triggering the push run again
-      - uses: stefanzweifel/git-auto-commit-action@v5
+      # pinned to a commit, not a movable tag, because it runs with write access.
+      # Pushes made with GITHUB_TOKEN don't trigger workflows; [skip ci] is a second guard.
+      - uses: stefanzweifel/git-auto-commit-action@b863ae1933cb653a53c021fe36dbb774e1fb9403  # v5.2.0
         with:
           commit_message: "chore: refresh contribution graph [skip ci]"
           file_pattern: "data/contributions.json contrib-heatmap.svg"
