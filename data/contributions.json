@@ -1,9 +1,9 @@
 {
  "range": {
   "start": "2025-11-09",
-  "end": "2026-11-13"
+  "end": "2026-11-14"
  },
- "total": 1445,
+ "total": 1446,
  "current_streak": 12,
  "longest_streak": 42,
  "best_day": {
@@ -1858,8 +1858,13 @@
   },
   {
    "date": "2026-11-13",
-   "count": 8,
+   "count": 9,
    "level": 2
+  },
+  {
+   "date": "2026-11-14",
+   "count": 0,
+   "level": 0
   }
  ]
 }
